@@ -20,6 +20,9 @@ u64 kvm__arch_default_ram_address(void)
 
 void kvm__arch_validate_cfg(struct kvm *kvm)
 {
+	if (kvm->cfg.arch.pmp_virt_test &&
+	    (kvm->cfg.nrcpus != 1 || sizeof(unsigned long) != 8))
+		die("--pmp-virt-test requires RV64 and one vCPU");
 }
 
 bool kvm__arch_cpu_supports_vm(void)

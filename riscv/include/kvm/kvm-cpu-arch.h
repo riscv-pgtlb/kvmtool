@@ -43,6 +43,12 @@ static inline __u64 __kvm_reg_id(__u64 type, __u64 subtype,
 					     id, KVM_REG_SIZE_ULONG)
 
 struct kvm_cpu {
+	bool pv_test_active;
+	int pv_test_fd;
+	u64 pv_test_gpa;
+	u64 pv_test_hva;
+	u64 pv_test_hpa;
+
 	pthread_t	thread;
 
 	unsigned long   cpu_id;
