@@ -3,10 +3,13 @@
 #include "kvm/8250-serial.h"
 #include "kvm/virtio-console.h"
 #include "kvm/fdt.h"
+#include "kvm/stage2-virt.h"
 
 #include <linux/kernel.h>
 #include <linux/kvm.h>
 #include <linux/sizes.h>
+#include <stdint.h>
+#include <string.h>
 
 struct kvm_ext kvm_req_ext[] = {
 	{ DEFINE_KVM_EXT(KVM_CAP_ONE_REG) },
@@ -20,9 +23,24 @@ u64 kvm__arch_default_ram_address(void)
 
 void kvm__arch_validate_cfg(struct kvm *kvm)
 {
+	u64 gpa = kvm->cfg.arch.stage2_virt_gpa;
+	u64 size = kvm->cfg.arch.stage2_virt_size;
 	if (kvm->cfg.arch.pmp_virt_test &&
 	    (kvm->cfg.nrcpus != 1 || sizeof(unsigned long) != 8))
 		die("--pmp-virt-test requires RV64 and one vCPU");
+	if (!kvm->cfg.arch.stage2_virt && (gpa || size))
+		die("--stage2-virt-gpa and --stage2-virt-size require "
+		    "--stage2-virt");
+	if (!kvm->cfg.arch.stage2_virt)
+		return;
+	if (!size)
+		die("--stage2-virt-size must be non-zero");
+	if (gpa & (SZ_4K - 1))
+		die("--stage2-virt-gpa must be 4 KiB aligned");
+	if (size & (SZ_4K - 1))
+		die("--stage2-virt-size must be 4 KiB aligned");
+	if (gpa > UINT64_MAX - size)
+		die("--stage2-virt GPA range overflows");
 }
 
 bool kvm__arch_cpu_supports_vm(void)
@@ -47,6 +65,10 @@ void kvm__init_ram(struct kvm *kvm)
 		    "address 0x%llx [err %d]", phys_size, phys_start, err);
 
 	kvm->arch.memory_guest_start = phys_start;
+
+	err = stage2_virt__configure(kvm);
+	if (err)
+		die("Failed to configure Stage2Virt: %s", strerror(-err));
 }
 
 void kvm__arch_delete_ram(struct kvm *kvm)

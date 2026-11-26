@@ -18,6 +18,9 @@ struct kvm_config_arch {
 	u64		custom_mimpid;
 	bool		ext_disabled[KVM_RISCV_ISA_EXT_MAX];
 	bool		sbi_ext_disabled[KVM_RISCV_SBI_EXT_MAX];
+	bool		stage2_virt;
+	u64		stage2_virt_gpa;
+	u64		stage2_virt_size;
 };
 
 int riscv__cpu_type_parser(const struct option *opt, const char *arg, int unset);
@@ -42,6 +45,14 @@ int riscv__cpu_type_parser(const struct option *opt, const char *arg, int unset)
 	OPT_U64('\0', "custom-mimpid",					\
 		&(cfg)->custom_mimpid,					\
 		"Show custom mimpid to Guest VCPU"),			\
+	OPT_BOOLEAN('\0', "stage2-virt", &(cfg)->stage2_virt,		\
+		    "Enable experimental Stage2Virt"),			\
+	OPT_U64('\0', "stage2-virt-gpa",				\
+		&(cfg)->stage2_virt_gpa,					\
+		"Stage2Virt guest physical start address"),		\
+	OPT_U64('\0', "stage2-virt-size",				\
+		&(cfg)->stage2_virt_size,				\
+		"Stage2Virt guest physical range size"),		\
 	OPT_BOOLEAN('\0', "disable-smnpm",				\
 		    &(cfg)->ext_disabled[KVM_RISCV_ISA_EXT_SMNPM],	\
 		    "Disable Smnpm Extension"),				\

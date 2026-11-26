@@ -205,6 +205,7 @@ ifeq ($(ARCH),riscv)
 	OBJS		+= riscv/kvm.o
 	OBJS		+= riscv/kvm-cpu.o
 	OBJS		+= riscv/pmp-virt-test.o
+	OBJS		+= riscv/stage2-virt.o
 	OBJS		+= riscv/pci.o
 	OBJS		+= riscv/plic.o
 	OBJS		+= riscv/aia.o

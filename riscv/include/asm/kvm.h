@@ -110,6 +110,15 @@ struct kvm_riscv_timer {
 	__u64 state;
 };
 
+#define KVM_RISCV_STAGE2_VIRT_ENABLE	(1ULL << 0)
+
+struct kvm_riscv_stage2_virt {
+	__u64 guest_phys_addr;
+	__u64 memory_size;
+	__u64 flags;
+	__u64 reserved[5];
+};
+
 /*
  * ISA extension IDs specific to KVM. This is not the same as the host ISA
  * extension IDs as that is internal to the host and should not be exposed
