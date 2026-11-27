@@ -48,6 +48,9 @@ struct kvm_cpu {
 	u64 pv_test_gpa;
 	u64 pv_test_hva;
 	u64 pv_test_hpa;
+	bool stage2_virt_test_active;
+	u64 stage2_virt_test_gpa;
+	u64 stage2_virt_test_size;
 
 	pthread_t	thread;
 

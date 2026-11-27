@@ -6,6 +6,7 @@
 #include "kvm/virtio.h"
 #include "kvm/sbi.h"
 #include "kvm/pmp-virt-test.h"
+#include "kvm/stage2-virt-test.h"
 #include "kvm/term.h"
 
 #include <asm/ptrace.h>
@@ -149,6 +150,7 @@ void kvm_cpu__arch_nmi(struct kvm_cpu *cpu)
 void kvm_cpu__delete(struct kvm_cpu *vcpu)
 {
 	pmp_virt_test__cleanup(vcpu);
+	stage2_virt_test__cleanup(vcpu);
 	free(vcpu);
 }
 
@@ -163,6 +165,8 @@ static bool kvm_cpu_riscv_sbi(struct kvm_cpu *vcpu)
 	switch (vcpu->kvm_run->riscv_sbi.extension_id) {
 	case PMP_VIRT_TEST_EXT:
 		return pmp_virt_test__sbi(vcpu);
+	case STAGE2_VIRT_TEST_EXT:
+		return stage2_virt_test__sbi(vcpu);
 	case SBI_EXT_BASE:
 		/* KVM forwards experimental extension probes to userspace. */
 		vcpu->kvm_run->riscv_sbi.ret[0] = SBI_ERR_NOT_SUPPORTED;
@@ -170,8 +174,10 @@ static bool kvm_cpu_riscv_sbi(struct kvm_cpu *vcpu)
 		if (vcpu->kvm_run->riscv_sbi.function_id == 3) {
 			vcpu->kvm_run->riscv_sbi.ret[0] = SBI_SUCCESS;
 			vcpu->kvm_run->riscv_sbi.ret[1] =
-				vcpu->kvm_run->riscv_sbi.args[0] == PMP_VIRT_TEST_EXT &&
-				vcpu->kvm->cfg.arch.pmp_virt_test;
+					(vcpu->kvm_run->riscv_sbi.args[0] == PMP_VIRT_TEST_EXT &&
+					vcpu->kvm->cfg.arch.pmp_virt_test) ||
+					(vcpu->kvm_run->riscv_sbi.args[0] == STAGE2_VIRT_TEST_EXT &&
+					vcpu->kvm->cfg.arch.stage2_virt_test);
 		}
 		break;
 	case SBI_EXT_0_1_CONSOLE_PUTCHAR:

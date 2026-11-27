@@ -49,6 +49,7 @@ KERNEL_STUB = r'''
 #define LINUX_KERNEL_TEST_STUB_H
 #include <stdint.h>
 #define U64_MAX UINT64_MAX
+#define SZ_4K 0x00001000UL
 #endif
 '''
 
@@ -95,6 +96,7 @@ TEST = r'''
 #include <errno.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include <linux/kvm.h>
 
@@ -103,7 +105,13 @@ static int capability_errno;
 static int configure_errno;
 static int capability_calls;
 static int configure_calls;
+static int test_number;
 static struct kvm_riscv_stage2_virt captured_request;
+
+static void test_pass(const char *description)
+{
+ printf("[TEST %02d] %-56s PASS\n", ++test_number, description);
+}
 
 int mock_ioctl(int fd, unsigned long command, ...)
 {
@@ -178,9 +186,91 @@ int main(void)
 
  set_valid_config(&kvm, &bank);
  reset_ioctls();
+ assert(stage2_virt__check_capability(&kvm) == 0);
+ assert(capability_calls == 1 && configure_calls == 0);
+ test_pass("capability query succeeds");
+
+ set_valid_config(&kvm, &bank);
+ reset_ioctls();
+ capability_errno = EIO;
+ assert(stage2_virt__check_capability(&kvm) == -EIO);
+ assert(capability_calls == 1 && configure_calls == 0);
+ test_pass("capability ioctl error is propagated");
+
+ set_valid_config(&kvm, &bank);
+ reset_ioctls();
+ capability_result = 0;
+ assert(stage2_virt__check_capability(&kvm) == -EOPNOTSUPP);
+ assert(capability_calls == 1 && configure_calls == 0);
+ test_pass("unsupported capability is rejected");
+
+ set_valid_config(&kvm, &bank);
+ reset_ioctls();
+ assert(stage2_virt__set_range(&kvm, 0x90000000ULL, 0x1000ULL) == 0);
+ assert(capability_calls == 1 && configure_calls == 1);
+ assert(captured_request.guest_phys_addr == 0x90000000ULL);
+ assert(captured_request.memory_size == 0x1000ULL);
+ assert(captured_request.flags == KVM_RISCV_STAGE2_VIRT_ENABLE);
+ for (index = 0; index < 5; index++)
+  assert(captured_request.reserved[index] == 0);
+ test_pass("dynamic range enable builds the expected request");
+
+ set_valid_config(&kvm, &bank);
+ reset_ioctls();
+ assert(stage2_virt__clear_range(&kvm, 0x90000000ULL, 0x1000ULL) == 0);
+ assert(capability_calls == 0 && configure_calls == 1);
+ assert(captured_request.guest_phys_addr == 0x90000000ULL);
+ assert(captured_request.memory_size == 0x1000ULL);
+ assert(captured_request.flags == 0);
+ for (index = 0; index < 5; index++)
+  assert(captured_request.reserved[index] == 0);
+ test_pass("dynamic range disable clears the enable flag");
+
+ set_valid_config(&kvm, &bank);
+ reset_ioctls();
+ assert(stage2_virt__set_range(&kvm, 0x90000001ULL, 0x1000ULL) == -EINVAL);
+ assert(capability_calls == 0 && configure_calls == 0);
+ test_pass("unaligned GPA is rejected before ioctl");
+
+ set_valid_config(&kvm, &bank);
+ reset_ioctls();
+ assert(stage2_virt__set_range(&kvm, 0x90000000ULL, 0x1001ULL) == -EINVAL);
+ assert(capability_calls == 0 && configure_calls == 0);
+ test_pass("unaligned range size is rejected before ioctl");
+
+ set_valid_config(&kvm, &bank);
+ reset_ioctls();
+ assert(stage2_virt__set_range(&kvm, 0x90000000ULL, 0) == -EINVAL);
+ assert(capability_calls == 0 && configure_calls == 0);
+ test_pass("zero-sized range is rejected before ioctl");
+
+ set_valid_config(&kvm, &bank);
+ reset_ioctls();
+ assert(stage2_virt__set_range(&kvm, UINT64_MAX - 0xfffULL,
+                               0x2000ULL) == -EOVERFLOW);
+ assert(capability_calls == 0 && configure_calls == 0);
+ test_pass("overflowing dynamic range is rejected");
+
+ set_valid_config(&kvm, &bank);
+ reset_ioctls();
+ assert(stage2_virt__set_range(&kvm, 0xa0000000ULL, 0x1000ULL) == -EINVAL);
+ assert(capability_calls == 0 && configure_calls == 0);
+ test_pass("dynamic range outside guest RAM is rejected");
+
+ set_valid_config(&kvm, &bank);
+ reset_ioctls();
+ configure_errno = ENOTTY;
+ assert(stage2_virt__clear_range(&kvm, 0x90000000ULL, 0x1000ULL) == -ENOTTY);
+ assert(capability_calls == 0 && configure_calls == 1);
+ assert(captured_request.flags == 0);
+ test_pass("disable ioctl error is propagated");
+
+ set_valid_config(&kvm, &bank);
+ reset_ioctls();
  kvm.cfg.arch.stage2_virt = false;
  assert(stage2_virt__configure(&kvm) == 0);
  assert(capability_calls == 0 && configure_calls == 0);
+ test_pass("disabled static configuration is a no-op");
 
  set_valid_config(&kvm, &bank);
  reset_ioctls();
@@ -191,24 +281,28 @@ int main(void)
  assert(captured_request.flags == KVM_RISCV_STAGE2_VIRT_ENABLE);
  for (index = 0; index < 5; index++)
   assert(captured_request.reserved[index] == 0);
+ test_pass("static configuration enables the requested range");
 
  set_valid_config(&kvm, &bank);
  reset_ioctls();
  bank.type = KVM_MEM_TYPE_DEVICE;
  assert(stage2_virt__configure(&kvm) == -EINVAL);
  assert(capability_calls == 0 && configure_calls == 0);
+ test_pass("device memory range is rejected");
 
  set_valid_config(&kvm, &bank);
  reset_ioctls();
  bank.type = KVM_MEM_TYPE_RAM | KVM_MEM_TYPE_READONLY;
  assert(stage2_virt__configure(&kvm) == 0);
  assert(capability_calls == 1 && configure_calls == 1);
+ test_pass("read-only RAM bank is accepted");
 
  set_valid_config(&kvm, &bank);
  reset_ioctls();
  kvm.cfg.arch.stage2_virt_gpa = 0xa0000000ULL;
  assert(stage2_virt__configure(&kvm) == -EINVAL);
  assert(capability_calls == 0 && configure_calls == 0);
+ test_pass("range starting past guest RAM is rejected");
 
  set_valid_config(&kvm, &bank);
  reset_ioctls();
@@ -216,37 +310,46 @@ int main(void)
  kvm.cfg.arch.stage2_virt_size = 0x2000ULL;
  assert(stage2_virt__configure(&kvm) == -EINVAL);
  assert(capability_calls == 0 && configure_calls == 0);
+ test_pass("range crossing guest RAM end is rejected");
 
  set_valid_config(&kvm, &bank);
  reset_ioctls();
  kvm.cfg.arch.stage2_virt_size = 0;
  assert(stage2_virt__configure(&kvm) == -EINVAL);
  assert(capability_calls == 0 && configure_calls == 0);
+ test_pass("zero-sized static range is rejected");
 
  set_valid_config(&kvm, &bank);
  reset_ioctls();
  kvm.cfg.arch.stage2_virt_gpa = UINT64_MAX - 0xfffULL;
  kvm.cfg.arch.stage2_virt_size = 0x2000ULL;
- assert(stage2_virt__configure(&kvm) == -EINVAL);
+ assert(stage2_virt__configure(&kvm) == -EOVERFLOW);
  assert(capability_calls == 0 && configure_calls == 0);
+ test_pass("overflowing static range is rejected");
 
  set_valid_config(&kvm, &bank);
  reset_ioctls();
  capability_errno = EIO;
  assert(stage2_virt__configure(&kvm) == -EIO);
  assert(capability_calls == 1 && configure_calls == 0);
+ test_pass("static capability ioctl error is propagated");
 
  set_valid_config(&kvm, &bank);
  reset_ioctls();
  capability_result = 0;
  assert(stage2_virt__configure(&kvm) == -EOPNOTSUPP);
  assert(capability_calls == 1 && configure_calls == 0);
+ test_pass("static configuration requires host capability");
 
  set_valid_config(&kvm, &bank);
  reset_ioctls();
  configure_errno = ENOTTY;
  assert(stage2_virt__configure(&kvm) == -ENOTTY);
  assert(capability_calls == 1 && configure_calls == 1);
+ test_pass("static configuration ioctl error is propagated");
+
+ assert(test_number == 22);
+ printf("[SUMMARY] %d Stage2Virt mock tests passed\n", test_number);
 
  return 0;
 }

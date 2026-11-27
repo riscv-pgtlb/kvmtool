@@ -35,12 +35,17 @@ static inline void test_log(const char *fmt, ...) { (void)fmt; }
 TEST = r'''
 #include <assert.h>
 #include <stdarg.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include "HANDLER"
 _Static_assert(PMP_VIRT_TEST_EXT >= 0x08000000UL &&
                PMP_VIRT_TEST_EXT <= 0x08ffffffUL, "KVM forwarded SBI range");
 _Static_assert(sizeof(struct pv_guest_request) == 32, "host ioctl ABI");
 static int opens, closes, calls, fail_errno, wrong_cause;
+static int test_number;
+static void test_pass(const char *description) {
+ printf("[TEST %02d] %-56s PASS\n", ++test_number, description);
+}
 int mock_open(const char *path, int flags, ...) {
  (void)path; (void)flags; opens++; return 7;
 }
@@ -65,32 +70,53 @@ int main(void) {
  struct kvm k={.cfg.nrcpus=1,.mem_banks.first=&bank};
  struct kvm_run r={0}; struct kvm_cpu v={.kvm=&k,.kvm_run=&r};
  assert(call(&v,0,0x80000000)==SBI_ERR_NOT_SUPPORTED && opens==0);
+ test_pass("disabled test extension is rejected");
  k.cfg.arch.pmp_virt_test=true;
  assert(call(&v,1,0x80000000)==SBI_ERR_INVALID_PARAM);
+ test_pass("COMPLETE without active session is rejected");
  assert(call(&v,0,0x80000001)==SBI_ERR_INVALID_PARAM);
+ test_pass("unaligned guest GPA is rejected");
  assert(call(&v,0,0x80001000)==SBI_ERR_INVALID_PARAM);
+ test_pass("GPA outside guest RAM is rejected");
  bank.size=4095; assert(call(&v,0,0x80000000)==SBI_ERR_INVALID_PARAM);
+ test_pass("incomplete guest RAM page is rejected");
  bank.size=4096; bank.type=2;
  assert(call(&v,0,0x80000000)==SBI_ERR_INVALID_PARAM); bank.type=1;
+ test_pass("non-RAM memory bank is rejected");
  k.cfg.nrcpus=2; assert(call(&v,0,0x80000000)==SBI_ERR_INVALID_PARAM);
+ test_pass("multi-vCPU test configuration is rejected");
  k.cfg.nrcpus=1; fail_errno=ENOTTY;
  assert(call(&v,0,0x80000000)==SBI_ERR_NOT_SUPPORTED && !v.pv_test_active);
+ test_pass("missing host probe ioctl is reported as unsupported");
  fail_errno=0; wrong_cause=1;
  assert(call(&v,0,0x80000000)==SBI_ERR_FAILURE && !v.pv_test_active);
+ test_pass("unexpected host fault cause is rejected");
  wrong_cause=0;
  assert(call(&v,0,0x80000000)==0 && v.pv_test_active);
+ test_pass("BEGIN opens a same-page probe session");
  assert(call(&v,0,0x80000000)==SBI_ERR_INVALID_PARAM);
+ test_pass("duplicate BEGIN is rejected");
  assert(call(&v,1,0x80001000)==SBI_ERR_INVALID_PARAM && v.pv_test_active);
+ test_pass("COMPLETE with mismatched GPA is rejected");
  assert(call(&v,1,0x80000000)==0 && !v.pv_test_active);
+ test_pass("COMPLETE closes the matching probe session");
  assert(call(&v,1,0x80000000)==SBI_ERR_INVALID_PARAM);
+ test_pass("repeated COMPLETE is rejected");
  assert(call(&v,0,0x80000000)==0);
+ test_pass("new BEGIN succeeds after completed session");
  fail_errno=EIO;
  assert(call(&v,1,0x80000000)==SBI_ERR_FAILURE && !v.pv_test_active);
+ test_pass("COMPLETE ioctl failure cleans up session state");
  fail_errno=0; assert(call(&v,0,0x80000000)==0);
+ test_pass("new BEGIN succeeds before ABORT test");
  r.riscv_sbi.args[0]=r.riscv_sbi.args[1]=0;
  r.riscv_sbi.function_id=2; assert(pmp_virt_test__sbi(&v));
  assert(!v.pv_test_active && (long)r.riscv_sbi.ret[0]==0);
+ test_pass("ABORT clears an active probe session");
  pmp_virt_test__cleanup(&v); assert(opens==closes && calls>0);
+ test_pass("cleanup balances host device open and close calls");
+ assert(test_number == 19);
+ printf("[SUMMARY] %d PMP.Virt mock tests passed\n", test_number);
  free(page); return 0;
 }
 '''

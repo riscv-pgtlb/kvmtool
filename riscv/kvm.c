@@ -28,6 +28,11 @@ void kvm__arch_validate_cfg(struct kvm *kvm)
 	if (kvm->cfg.arch.pmp_virt_test &&
 	    (kvm->cfg.nrcpus != 1 || sizeof(unsigned long) != 8))
 		die("--pmp-virt-test requires RV64 and one vCPU");
+	if (kvm->cfg.arch.stage2_virt_test &&
+	    (kvm->cfg.nrcpus != 1 || sizeof(unsigned long) != 8))
+		die("--stage2-virt-test requires RV64 and one vCPU");
+	if (kvm->cfg.arch.stage2_virt_test && kvm->cfg.arch.stage2_virt)
+		die("--stage2-virt-test cannot be combined with --stage2-virt");
 	if (!kvm->cfg.arch.stage2_virt && (gpa || size))
 		die("--stage2-virt-gpa and --stage2-virt-size require "
 		    "--stage2-virt");

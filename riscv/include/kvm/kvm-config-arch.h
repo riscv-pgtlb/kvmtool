@@ -10,6 +10,7 @@ enum riscv__cpu_type {
 
 struct kvm_config_arch {
 	bool		pmp_virt_test;
+	bool		stage2_virt_test;
 	enum riscv__cpu_type cpu_type;
 	const char	*dump_dtb_filename;
 	u64		suspend_seconds;
@@ -29,6 +30,9 @@ int riscv__cpu_type_parser(const struct option *opt, const char *arg, int unset)
 	pfx,								\
 	OPT_BOOLEAN('\0', "pmp-virt-test", &(cfg)->pmp_virt_test,		\
 		    "Enable experimental single-vCPU VS/HS page test"),	\
+	OPT_BOOLEAN('\0', "stage2-virt-test",				\
+		    &(cfg)->stage2_virt_test,				\
+		    "Enable experimental single-vCPU VU/VS page test"),	\
 	OPT_CALLBACK('\0', "cpu-type", NULL, "min or max",		\
 		     "Choose the cpu type (default is max).", riscv__cpu_type_parser, kvm),\
 	OPT_STRING('\0', "dump-dtb", &(cfg)->dump_dtb_filename,		\
