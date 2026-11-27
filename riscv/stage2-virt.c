@@ -77,8 +77,11 @@ int stage2_virt__set_range(struct kvm *kvm, u64 gpa, u64 size)
 int stage2_virt__clear_range(struct kvm *kvm, u64 gpa, u64 size)
 {
 	struct kvm_riscv_stage2_virt request = {
-		.guest_phys_addr = gpa,
-		.memory_size = size,
+		/* Disabling clears the VM-wide active range.  The KVM ABI
+		 * requires the range fields to be zero when ENABLE is clear.
+		 */
+		.guest_phys_addr = 0,
+		.memory_size = 0,
 		.flags = 0,
 	};
 	int ret;

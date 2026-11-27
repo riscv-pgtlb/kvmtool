@@ -219,12 +219,12 @@ int main(void)
  reset_ioctls();
  assert(stage2_virt__clear_range(&kvm, 0x90000000ULL, 0x1000ULL) == 0);
  assert(capability_calls == 0 && configure_calls == 1);
- assert(captured_request.guest_phys_addr == 0x90000000ULL);
- assert(captured_request.memory_size == 0x1000ULL);
+ assert(captured_request.guest_phys_addr == 0);
+ assert(captured_request.memory_size == 0);
  assert(captured_request.flags == 0);
  for (index = 0; index < 5; index++)
   assert(captured_request.reserved[index] == 0);
- test_pass("dynamic range disable clears the enable flag");
+ test_pass("dynamic range disable sends the zeroed KVM request");
 
  set_valid_config(&kvm, &bank);
  reset_ioctls();
